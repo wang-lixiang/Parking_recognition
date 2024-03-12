@@ -1,0 +1,2 @@
+# Parking_recognition
+停车场车位的实时检测，利用opencv和keras帮助完成检测，能够解决停车场的停车悖论
