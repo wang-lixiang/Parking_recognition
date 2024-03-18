@@ -50,20 +50,23 @@ class Parking:
 
         return masked
 
+    # 将图像转化为灰度图
     def convert_gray_scale(self, image):
         return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
+    # 边缘检测
     def detect_edges(self, image, low_threshold=50, high_threshold=200):
         return cv2.Canny(image, low_threshold, high_threshold)
 
+    # 过滤掉图像中不需要的地方，保留指点区域
     def filter_region(self, image, vertices):
-        """
-                剔除掉不需要的地方
-        """
+        # 创建一个和原图大小相同的全零数组
         mask = np.zeros_like(image)
         if len(mask.shape) == 2:
+            # 将指定的vertices多边形区域填充为白色
             cv2.fillPoly(mask, vertices, 255)
             self.cv_show('mask', mask)
+        # 将原图和mask进行按位与操作，保留mask区域内原图像像素
         return cv2.bitwise_and(image, mask)
 
     # 通过手动定义几个点，画出一个大致的多边形，框出停车场大致的轮廓
@@ -94,6 +97,7 @@ class Parking:
         # rho距离精度,theta角度精度,threshod超过设定阈值才被检测出线段
         return cv2.HoughLinesP(image, rho=0.1, theta=np.pi / 10, threshold=15, minLineLength=9, maxLineGap=4)
 
+    # 在图像中画出识别出来的停车位线
     def draw_lines(self, image, lines, color=[255, 0, 0], thickness=2, make_copy=True):
         # 过滤霍夫变换检测到直线
         # 创建输入图像的副本，避免修改原始图像
@@ -170,40 +174,49 @@ class Parking:
             cv2.rectangle(new_image, tup_topLeft, tup_botRight, (0, 255, 0), 3)
         return new_image, rects
 
+    # 在图像上绘制停车位标记
     def draw_parking(self, image, rects, make_copy=True, color=[255, 0, 0], thickness=2, save=True):
+        # 如果make_copy为True，则创建图像的副本以免修改原始图像
         if make_copy:
             new_image = np.copy(image)
+        # 停车位的间隔是固定的
         gap = 15.5
-        spot_dict = {}  # 字典：一个车位对应一个位置
+        # 用于存储车位位置信息的字典
+        spot_dict = {}
+        # 初始化总停车位数
         tot_spots = 0
-        # 微调
+        # 微调每个矩形的位置，这里给出了微调的偏移量
         adj_y1 = {0: 20, 1: -10, 2: 0, 3: -11, 4: 28, 5: 5, 6: -15, 7: -15, 8: -10, 9: -30, 10: 9, 11: -32}
         adj_y2 = {0: 30, 1: 50, 2: 15, 3: 10, 4: -15, 5: 15, 6: 15, 7: -20, 8: 15, 9: 15, 10: 0, 11: 30}
-
         adj_x1 = {0: -8, 1: -15, 2: -15, 3: -15, 4: -15, 5: -15, 6: -15, 7: -15, 8: -10, 9: -10, 10: -10, 11: 0}
         adj_x2 = {0: 0, 1: 15, 2: 15, 3: 15, 4: 15, 5: 15, 6: 15, 7: 15, 8: 10, 9: 10, 10: 10, 11: 0}
+
+        # 遍历每个矩形
         for key in rects:
             tup = rects[key]
             x1 = int(tup[0] + adj_x1[key])
             x2 = int(tup[2] + adj_x2[key])
             y1 = int(tup[1] + adj_y1[key])
             y2 = int(tup[3] + adj_y2[key])
+            # 绘制每列停车位的大矩形
             cv2.rectangle(new_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # 计算停车位间的水平线数量
             num_splits = int(abs(y2 - y1) // gap)
+            # 在大矩形中绘制水平线
             for i in range(0, num_splits + 1):
                 y = int(y1 + i * gap)
                 cv2.line(new_image, (x1, y), (x2, y), color, thickness)
+            # 在非边缘位置绘制竖直线
             if key > 0 and key < len(rects) - 1:
-                # 竖直线
                 x = int((x1 + x2) / 2)
                 cv2.line(new_image, (x, y1), (x, y2), color, thickness)
-            # 计算数量
+            # 计算总停车位数
             if key == 0 or key == (len(rects) - 1):
                 tot_spots += num_splits + 1
             else:
                 tot_spots += 2 * (num_splits + 1)
 
-            # 字典对应好
+            # 将每个车位与其编号对应起来
             if key == 0 or key == (len(rects) - 1):
                 for i in range(0, num_splits + 1):
                     cur_len = len(spot_dict)
@@ -218,26 +231,25 @@ class Parking:
                     spot_dict[(x, y, x2, y + gap)] = cur_len + 2
 
         print("total parking spaces: ", tot_spots, cur_len)
+        # 如果save为True，则保存绘制了停车位的图像
         if save:
             filename = 'with_parking.jpg'
+            # 两个参数：文件路径和要保存的图像
             cv2.imwrite(filename, new_image)
+        # 返回新图像和车位字典
         return new_image, spot_dict
 
-    def assign_spots_map(self, image, spot_dict, make_copy=True, color=[255, 0, 0], thickness=2):
-        if make_copy:
-            new_image = np.copy(image)
-        for spot in spot_dict.keys():
-            (x1, y1, x2, y2) = spot
-            cv2.rectangle(new_image, (int(x1), int(y1)), (int(x2), int(y2)), color, thickness)
-        return new_image
-
+    # 裁剪图像，将识别到的车位每个都以单独的图像显示，方便用于CNN训练
     def save_images_for_cnn(self, image, spot_dict, folder_name='cnn_data'):
         for spot in spot_dict.keys():
+            # 获取车位的位置信息
             (x1, y1, x2, y2) = spot
             (x1, y1, x2, y2) = (int(x1), int(y1), int(x2), int(y2))
-            # 裁剪
+            # 裁剪车位图像
             spot_img = image[y1:y2, x1:x2]
+            # 将车位图像调整大小为CNN所需的尺寸（这里将尺寸放大了2倍）
             spot_img = cv2.resize(spot_img, (0, 0), fx=2.0, fy=2.0)
+            # 获取车位编号
             spot_id = spot_dict[spot]
 
             filename = 'spot' + str(spot_id) + '.jpg'
@@ -245,49 +257,58 @@ class Parking:
 
             cv2.imwrite(os.path.join(folder_name, filename), spot_img)
 
+    # 对输入图像进行分类预测，并返回预测的类别标签
     def make_prediction(self, image, model, class_dictionary):
-        # 预处理
+        # 预处理：将图像像素值缩放到[0,1]范围内
         img = image / 255.
-
-        # 转换成4D tensor
+        # 将图像转换成4D张量，以符合模型的输入要求
         image = np.expand_dims(img, axis=0)
-
-        # 用训练好的模型进行训练
+        # 使用给定的模型进行图像分类预测
         class_predicted = model.predict(image)
+        # 获取预测结果中概率最高的类别索引
         inID = np.argmax(class_predicted[0])
+        # 根据类别索引从类别字典中获取类别标签
         label = class_dictionary[inID]
         return label
 
+    # 预测图像
     def predict_on_image(self, image, spot_dict, model, class_dictionary, make_copy=True, color=[0, 255, 0], alpha=0.5):
+        # 复制一下图像，避免修改原图
         if make_copy:
             new_image = np.copy(image)
             overlay = np.copy(image)
         self.cv_show('new_image', new_image)
         cnt_empty = 0
         all_spots = 0
+
+        # 遍历每个车位
         for spot in spot_dict.keys():
             all_spots += 1
             (x1, y1, x2, y2) = spot
             (x1, y1, x2, y2) = (int(x1), int(y1), int(x2), int(y2))
+            # 提取车位图像并调整大小以符合模型的输入要求
             spot_img = image[y1:y2, x1:x2]
+            # 48*48已经是VGG16接受的最小图像大小
             spot_img = cv2.resize(spot_img, (48, 48))
 
+            # 如果预测为空闲车位，则在覆盖层上绘制矩形标记
             label = self.make_prediction(spot_img, model, class_dictionary)
             if label == 'empty':
                 cv2.rectangle(overlay, (int(x1), int(y1)), (int(x2), int(y2)), color, -1)
                 cnt_empty += 1
-
+        # 将覆盖层与原始图像叠加，产生标记效果
         cv2.addWeighted(overlay, alpha, new_image, 1 - alpha, 0, new_image)
 
+        # 在图像上添加文字信息：可用车位数量和总车位数量
         cv2.putText(new_image, "Available: %d spots" % cnt_empty, (30, 95),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7, (255, 255, 255), 2)
-
         cv2.putText(new_image, "Total: %d spots" % all_spots, (30, 125),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7, (255, 255, 255), 2)
-        save = False
 
+        # 如果需要保存图像，则保存，这里选择不保存
+        save = False
         if save:
             filename = 'with_marking.jpg'
             cv2.imwrite(filename, new_image)
@@ -301,6 +322,7 @@ class Parking:
         while ret:
             ret, image = cap.read()
             count += 1
+            # 每五帧后处理一次
             if count == 5:
                 count = 0
 
@@ -324,16 +346,16 @@ class Parking:
 
                 cv2.addWeighted(overlay, alpha, new_image, 1 - alpha, 0, new_image)
 
+                # 在图像上添加文字信息：可用车位数量和总车位数量
                 cv2.putText(new_image, "Available: %d spots" % cnt_empty, (30, 95),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.7, (255, 255, 255), 2)
-
                 cv2.putText(new_image, "Total: %d spots" % all_spots, (30, 125),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.7, (255, 255, 255), 2)
                 cv2.imshow('frame', new_image)
+
                 if cv2.waitKey(10) & 0xFF == ord('q'):
                     break
-
         cv2.destroyAllWindows()
         cap.release()
