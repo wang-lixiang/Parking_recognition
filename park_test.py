@@ -11,6 +11,7 @@ import pickle
 cwd = os.getcwd()
 
 
+# 返回的是我们识别到的每个车位的坐标点形成的字典
 def img_process(test_images, park):
     # Step 1: 提取白色和黄色区域的图像
     # map 函数将一个函数应用到一个可迭代对象的每个元素上，对每个图像都进行同样的操作
@@ -50,6 +51,7 @@ def img_process(test_images, park):
 
     park.show_images(rect_images)
 
+    # 为每个图像绘制停车位，并将结果保存在列表中
     delineated = []
     spot_pos = []
     for image, rects in zip(test_images, rect_coords):
@@ -57,10 +59,14 @@ def img_process(test_images, park):
         delineated.append(new_image)
         spot_pos.append(spot_dict)
 
+    # 显示绘制停车位后的图像
     park.show_images(delineated)
+    # 经过对比，我们发现第二幅图的提取效果比较好，选择第二个图像的停车位信息
     final_spot_dict = spot_pos[1]
+    # 打印停车位数量
     print(len(final_spot_dict))
 
+    # 将最终的停车位信息保存到文件中
     with open('spot_dict.pickle', 'wb') as handle:
         pickle.dump(final_spot_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -69,20 +75,21 @@ def img_process(test_images, park):
     return final_spot_dict
 
 
+# 导入我们训练好的模型
 def keras_model(weights_path):
     model = load_model(weights_path)
     return model
 
 
+# 测试图像的效果
 def img_test(test_images, final_spot_dict, model, class_dictionary):
     for i in range(len(test_images)):
         predicted_images = park.predict_on_image(test_images[i], final_spot_dict, model, class_dictionary)
 
 
+# 测试视频的效果
 def video_test(video_name, final_spot_dict, model, class_dictionary):
-    name = video_name
-    cap = cv2.VideoCapture(name)
-    park.predict_on_video(name, final_spot_dict, model, class_dictionary, ret=True)
+    park.predict_on_video(video_name, final_spot_dict, model, class_dictionary, ret=True)
 
 
 if __name__ == '__main__':
@@ -99,6 +106,10 @@ if __name__ == '__main__':
     park = Parking()
     park.show_images(test_images)
     final_spot_dict = img_process(test_images, park)
+    # 加载已经训练好的模型
     model = keras_model(weights_path)
-    img_test(test_images, final_spot_dict, model, class_dictionary)
+
+    # 图片测试
+    # img_test(test_images, final_spot_dict, model, class_dictionary)
+    # 视频测试，不过很吃电脑配置
     video_test(video_name, final_spot_dict, model, class_dictionary)
